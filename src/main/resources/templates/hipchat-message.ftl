@@ -8,9 +8,6 @@
 <#elseif trigger == "success">
     <b>succeeded</b>
 </#if>
+[&nbsp;${executionData.context.job.username}&nbsp;]
+[&nbsp;<a href="${executionData.href}">View Output</a>&nbsp;]
 </p>
-<ul>
-    <li>User: ${executionData.context.job.username}</li>
-    <li>ExecId: ${executionData.context.job.execid}</li>
-</ul>
-<p><a href="${executionData.href}">View Output</a></p>
