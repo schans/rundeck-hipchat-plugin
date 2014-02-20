@@ -4,10 +4,9 @@
 <#if trigger == "start">
     <b>started</b>
 <#elseif trigger == "failure">
-    <b>failed</b>
+    <b>failed :-(</b>
 <#elseif trigger == "success">
-    <b>succeeded</b>
+    <b>succeeded :-)</b>
 </#if>
-[${executionData.context.job.username}]
-[<a href="${executionData.href}">output</a>]
+&nbsp;-&nbsp;${executionData.context.job.username}&nbsp;-&nbsp;<a href="${executionData.href}">output</a>
 </p>
