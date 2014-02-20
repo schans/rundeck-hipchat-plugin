@@ -1,6 +1,6 @@
 <p>Execution of job
 <a href="${executionData.job.href}">
-<#if executionData.job.group?has_content>${executionData.job.group}/</#if>${executionData.job.name}</a> for project ${executionData.project} has
+<#if executionData.job.group?has_content>${executionData.job.group}/</#if>${executionData.job.name}</a> for project <b>${executionData.project}</b> has
 <#if trigger == "start">
     <b>started</b>
 <#elseif trigger == "failure">
