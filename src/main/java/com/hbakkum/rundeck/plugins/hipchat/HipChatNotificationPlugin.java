@@ -16,24 +16,30 @@
 
 package com.hbakkum.rundeck.plugins.hipchat;
 
-import com.dtolabs.rundeck.core.plugins.Plugin;
-import com.dtolabs.rundeck.plugins.descriptions.PluginDescription;
-import com.dtolabs.rundeck.plugins.descriptions.PluginProperty;
-import com.dtolabs.rundeck.plugins.notification.NotificationPlugin;
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
-import org.codehaus.jackson.annotate.JsonIgnoreProperties;
-import org.codehaus.jackson.annotate.JsonProperty;
-import org.codehaus.jackson.map.ObjectMapper;
-
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.ObjectMapper;
+
+import com.dtolabs.rundeck.core.plugins.Plugin;
+import com.dtolabs.rundeck.core.plugins.configuration.PropertyScope;
+import com.dtolabs.rundeck.plugins.descriptions.PluginDescription;
+import com.dtolabs.rundeck.plugins.descriptions.PluginProperty;
+import com.dtolabs.rundeck.plugins.notification.NotificationPlugin;
+
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
 
 /**
  * Sends Rundeck job notification messages to a HipChat room.
@@ -73,14 +79,16 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
 
     @PluginProperty(
             title = "Room",
-            description = "HipChat room to send notification message to.",
-            required = true)
+            description = "Override default HipChat room to send notification message to.",
+            required = false,
+            scope = PropertyScope.Project)
     private String room;
 
     @PluginProperty(
             title = "API Auth Token",
-            description = "HipChat API authentication token. Notification level token will do.",
-            required = true)
+            description = "Override default HipChat API authentication token. Notification level token will do.",
+            required = false,
+            scope = PropertyScope.Project)
     private String apiAuthToken;
 
     /**
@@ -92,10 +100,21 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
      * @throws HipChatNotificationPluginException when any error occurs sending the HipChat message
      * @return true, if the HipChat API response indicates a message was successfully delivered to a chat room
      */
-    @Override
-    public boolean postNotification(String trigger, Map executionData, Map config) {
+    public boolean postNotification(String trigger,Map executionData,Map config) {
+
+        System.err.printf("Trigger %s fired for %s, configuration: %s\n",trigger,executionData,config);
+
         if (!TRIGGER_NOTIFICATION_DATA.containsKey(trigger)) {
             throw new IllegalArgumentException("Unknown trigger type: [" + trigger + "].");
+        }
+
+        if (isBlank(room)) {
+            throw new HipChatNotificationPluginException(
+                    "HipChat room 'plugin.Notification.HipChatNotification.room' missing in framework or project properties");
+        }
+        if (isBlank(apiAuthToken)) {
+            throw new HipChatNotificationPluginException(
+                    "HipChat apiAuthToken 'plugin.Notification.HipChatNotification.apiAuthToken' missing in framework or project properties");
         }
 
         String color = TRIGGER_NOTIFICATION_DATA.get(trigger).color;
@@ -252,4 +271,7 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
         }
     }
 
+    private boolean isBlank(String string) {
+        return null == string || "".equals(string);
+    }
 }

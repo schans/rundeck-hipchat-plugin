@@ -13,10 +13,20 @@ Installation Instructions
 See the [rundeck documentation](http://rundeck.org/docs/manual/plugins.html#installing-plugins) for more 
 information on installing rundeck plugins.
 
-Limitations
------------
+## Configuration
 
-Currently, rundeck (1.5.3) notification plugins only support "Instance" scoped configuration properties which means
-HipChat API token and room configuration must be entered in the gui each time you configure a notification (as opposed 
-to specifying these once in a project property file). Apparently there are plans to add more configuration scopes in 
-the future, at which point, I'll update this plugin to take advantage of these.
+The plugin requires two configuration entries. They can be specified in the framework.properties and project.properties config files. 
+
+* auth_token: HipChat API authentication token. Notification level token will do.
+* room: HipChat room to send notification message to.
+
+Configure the service_key in your project configuration by
+adding an entry like so: $RDECK_BASE/projects/{project}/etc/project.properties
+
+    project.plugin.Notification.HipChatNotification.apiAuthToken=xxasdf12w354123dsf
+    project.plugin.Notification.HipChatNotification.room=myroom
+
+Or configure it at the instance level: $RDECK_BASE/etc/framework.properties
+
+    framework.plugin.Notification.HipChatNotification.apiAuthToken=xxasdf12w354123dsf
+    framework.plugin.Notification.HipChatNotification.room=myroom
