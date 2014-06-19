@@ -154,7 +154,7 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
             templateName = HIPCHAT_MESSAGE_DEFAULT_TEMPLATE;
         }
 
-        Map<String, Object> model = new HashMap();
+        Map<String, Object> model = new HashMap<String, Object>();
         model.put("trigger", trigger);
         model.put("execution", executionData);
         model.put("config", config);
