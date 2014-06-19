@@ -71,7 +71,8 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
     @PluginProperty(
             title = "Room",
             description = "HipChat room to send notification message to.",
-            required = true)
+            required = true,
+            scope = PropertyScope.Project)
     private String room;
 
     @PluginProperty(
@@ -107,8 +108,7 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
      * @throws HipChatNotificationPluginException when any error occurs sending the HipChat message
      * @return true, if the HipChat API response indicates a message was successfully delivered to a chat room
      */
-    @Override
-    public boolean postNotification(String trigger, Map executionData, Map config) {
+    public boolean postNotification(String trigger,Map executionData,Map config) {
         if (!TRIGGER_MESSAGE_COLORS.containsKey(trigger)) {
             throw new IllegalArgumentException("Unknown trigger type: [" + trigger + "].");
         }
