@@ -16,30 +16,25 @@
 
 package com.hbakkum.rundeck.plugins.hipchat;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
+import com.dtolabs.rundeck.core.plugins.Plugin;
+import com.dtolabs.rundeck.core.plugins.configuration.PropertyScope;
+import com.dtolabs.rundeck.plugins.descriptions.PluginDescription;
+import com.dtolabs.rundeck.plugins.descriptions.PluginProperty;
+import com.dtolabs.rundeck.plugins.notification.NotificationPlugin;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.ObjectMapper;
+
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
-
-import org.codehaus.jackson.annotate.JsonIgnoreProperties;
-import org.codehaus.jackson.annotate.JsonProperty;
-import org.codehaus.jackson.map.ObjectMapper;
-
-import com.dtolabs.rundeck.core.plugins.Plugin;
-import com.dtolabs.rundeck.core.plugins.configuration.PropertyScope;
-import com.dtolabs.rundeck.plugins.descriptions.PluginDescription;
-import com.dtolabs.rundeck.plugins.descriptions.PluginProperty;
-import com.dtolabs.rundeck.plugins.notification.NotificationPlugin;
-
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
 
 /**
  * Sends Rundeck job notification messages to a HipChat room.
@@ -50,7 +45,8 @@ import freemarker.template.TemplateException;
 @PluginDescription(title="HipChat")
 public class HipChatNotificationPlugin implements NotificationPlugin {
 
-    private static final String HIPCHAT_API_BASE = "https://api.hipchat.com/v1/";
+    private static final String HIPCHAT_API_DEFAULT_BASE_URL = "https://api.hipchat.com";
+    private static final String HIPCHAT_API_DEFAULT_VERSION = "v1";
     private static final String HIPCHAT_API_MESSAGE_ROOM_METHOD = "rooms/message";
     private static final String HIPCHAT_API_MESSAGE_ROOM_QUERY = "?auth_token=%s&format=json&message_format=html&room_id=%s&from=%s&message=%s&color=%s";
 
@@ -59,37 +55,48 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
     private static final String HIPCHAT_MESSAGE_COLOR_RED = "red";
 
     private static final String HIPCHAT_MESSAGE_FROM_NAME = "Rundeck";
-    private static final String HIPCHAT_MESSAGE_TEMPLATE = "hipchat-message.ftl";
+    private static final String HIPCHAT_MESSAGE_DEFAULT_TEMPLATE = "hipchat-message.ftl";
 
     private static final String TRIGGER_START = "start";
     private static final String TRIGGER_SUCCESS = "success";
     private static final String TRIGGER_FAILURE = "failure";
 
-    private static final Configuration FREEMARKER_CFG = new Configuration();
+    private static final Map<String, String> TRIGGER_MESSAGE_COLORS = new HashMap<String, String>();
     static {
-        FREEMARKER_CFG.setClassForTemplateLoading(HipChatNotificationPlugin.class, "/templates");
-    }
-
-    private static final Map<String, HipChatNotificationData> TRIGGER_NOTIFICATION_DATA = new HashMap<String, HipChatNotificationData>();
-    static {
-        TRIGGER_NOTIFICATION_DATA.put(TRIGGER_START, new HipChatNotificationData(HIPCHAT_MESSAGE_TEMPLATE, HIPCHAT_MESSAGE_COLOR_YELLOW));
-        TRIGGER_NOTIFICATION_DATA.put(TRIGGER_SUCCESS, new HipChatNotificationData(HIPCHAT_MESSAGE_TEMPLATE, HIPCHAT_MESSAGE_COLOR_GREEN));
-        TRIGGER_NOTIFICATION_DATA.put(TRIGGER_FAILURE, new HipChatNotificationData(HIPCHAT_MESSAGE_TEMPLATE, HIPCHAT_MESSAGE_COLOR_RED));
+        TRIGGER_MESSAGE_COLORS.put(TRIGGER_START, HIPCHAT_MESSAGE_COLOR_YELLOW);
+        TRIGGER_MESSAGE_COLORS.put(TRIGGER_SUCCESS, HIPCHAT_MESSAGE_COLOR_GREEN);
+        TRIGGER_MESSAGE_COLORS.put(TRIGGER_FAILURE, HIPCHAT_MESSAGE_COLOR_RED);
     }
 
     @PluginProperty(
             title = "Room",
-            description = "Override default HipChat room to send notification message to.",
-            required = false,
-            scope = PropertyScope.Project)
+            description = "HipChat room to send notification message to.",
+            required = true)
     private String room;
 
     @PluginProperty(
-            title = "API Auth Token",
-            description = "Override default HipChat API authentication token. Notification level token will do.",
+            title = "HipChat Server Base URL",
+            description = "Base URL of HipChat Server",
             required = false,
+            defaultValue = HIPCHAT_API_DEFAULT_BASE_URL,
+            scope = PropertyScope.Project)
+    private String hipchatServerBaseUrl;
+
+    @PluginProperty(
+            title = "API Auth Token",
+            description = "HipChat API authentication token. Notification level token will do.",
+            required = true,
             scope = PropertyScope.Project)
     private String apiAuthToken;
+
+    @PluginProperty(
+            title = "Notification Message Template",
+            description =
+                    "Absolute path to a FreeMarker template that will be used to generate the notification message. " +
+                    "If unspecified a default message template will be used.",
+            required = false,
+            scope = PropertyScope.Project)
+    private String messageTemplateLocation;
 
     /**
      * Sends a message to a HipChat room when a job notification event is raised by Rundeck.
@@ -100,24 +107,13 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
      * @throws HipChatNotificationPluginException when any error occurs sending the HipChat message
      * @return true, if the HipChat API response indicates a message was successfully delivered to a chat room
      */
-    public boolean postNotification(String trigger,Map executionData,Map config) {
-
-        System.err.printf("Trigger %s fired for %s, configuration: %s\n",trigger,executionData,config);
-
-        if (!TRIGGER_NOTIFICATION_DATA.containsKey(trigger)) {
+    @Override
+    public boolean postNotification(String trigger, Map executionData, Map config) {
+        if (!TRIGGER_MESSAGE_COLORS.containsKey(trigger)) {
             throw new IllegalArgumentException("Unknown trigger type: [" + trigger + "].");
         }
 
-        if (isBlank(room)) {
-            throw new HipChatNotificationPluginException(
-                    "HipChat room 'plugin.Notification.HipChatNotification.room' missing in framework or project properties");
-        }
-        if (isBlank(apiAuthToken)) {
-            throw new HipChatNotificationPluginException(
-                    "HipChat apiAuthToken 'plugin.Notification.HipChatNotification.apiAuthToken' missing in framework or project properties");
-        }
-
-        String color = TRIGGER_NOTIFICATION_DATA.get(trigger).color;
+        String color = TRIGGER_MESSAGE_COLORS.get(trigger);
         String message = generateMessage(trigger, executionData, config);
         String params = String.format(HIPCHAT_API_MESSAGE_ROOM_QUERY,
                 urlEncode(apiAuthToken),
@@ -142,16 +138,30 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
     }
 
     private String generateMessage(String trigger, Map executionData, Map config) {
-        String templateName = TRIGGER_NOTIFICATION_DATA.get(trigger).template;
+        Configuration freeMarkerCfg = new Configuration();
+        String templateName;
+
+        if (messageTemplateLocation != null && messageTemplateLocation.length() > 0) {
+            File messageTemplateFile = new File(messageTemplateLocation);
+            try {
+                freeMarkerCfg.setDirectoryForTemplateLoading(messageTemplateFile.getParentFile());
+            } catch (IOException ioEx) {
+                throw new HipChatNotificationPluginException("Error setting FreeMarker template loading directory: [" + ioEx.getMessage() + "].", ioEx);
+            }
+            templateName = messageTemplateFile.getName();
+        } else {
+            freeMarkerCfg.setClassForTemplateLoading(HipChatNotificationPlugin.class, "/templates");
+            templateName = HIPCHAT_MESSAGE_DEFAULT_TEMPLATE;
+        }
 
         Map<String, Object> model = new HashMap();
         model.put("trigger", trigger);
-        model.put("executionData", executionData);
+        model.put("execution", executionData);
         model.put("config", config);
 
         StringWriter sw = new StringWriter();
         try {
-            Template template = FREEMARKER_CFG.getTemplate(templateName);
+            Template template = freeMarkerCfg.getTemplate(templateName);
             template.process(model,sw);
 
         } catch (IOException ioEx) {
@@ -172,7 +182,7 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
     }
 
     private HipChatAPIResponse invokeHipChatAPIMethod(String method, String params) {
-        URL requestUrl = toURL(HIPCHAT_API_BASE + method + params);
+        URL requestUrl = toURL(hipchatServerBaseUrl + "/" + HIPCHAT_API_DEFAULT_VERSION + "/" + method + params);
 
         HttpURLConnection connection = null;
         InputStream responseStream = null;
@@ -226,7 +236,7 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
         try {
             return connection.getResponseCode();
         } catch (IOException ioEx) {
-            throw new HipChatNotificationPluginException("Failed to obtain HTTP response: [" + ioEx.getMessage() + "].", ioEx);
+            throw new HipChatNotificationPluginException("Failed to obtain HTTP response from [" + hipchatServerBaseUrl + "]: [" + ioEx.getMessage() + "].", ioEx);
         }
     }
 
@@ -248,15 +258,6 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
         }
     }
 
-    private static class HipChatNotificationData {
-        private String template;
-        private String color;
-        public HipChatNotificationData(String template, String color) {
-            this.template = template;
-            this.color = color;
-        }
-    }
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class HipChatAPIResponse {
         @JsonProperty private String status;
@@ -271,7 +272,4 @@ public class HipChatNotificationPlugin implements NotificationPlugin {
         }
     }
 
-    private boolean isBlank(String string) {
-        return null == string || "".equals(string);
-    }
 }
