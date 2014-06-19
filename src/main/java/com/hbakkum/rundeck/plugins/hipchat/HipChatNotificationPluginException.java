@@ -20,6 +20,7 @@ package com.hbakkum.rundeck.plugins.hipchat;
  * @author Hayden Bakkum
  */
 public class HipChatNotificationPluginException extends RuntimeException {
+    private static final long serialVersionUID = 5642053297084970436L;
 
     /**
      * Constructor.
